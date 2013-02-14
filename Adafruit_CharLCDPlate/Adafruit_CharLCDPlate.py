@@ -4,7 +4,7 @@
 # based on code from lrvick and LiquidCrystal
 # lrvic - https://github.com/lrvick/raspi-hd44780/blob/master/hd44780.py
 # LiquidCrystal - https://github.com/arduino/Arduino/blob/master/libraries/LiquidCrystal/LiquidCrystal.cpp
-
+#
 
 from time import sleep
 from Adafruit_I2C import Adafruit_I2C
@@ -79,7 +79,7 @@ class Adafruit_CharLCDPlate:
 
 
 
-    def __init__(self, busnum=1, pin_rs=15, pin_e=13, pins_db=[12, 11, 10, 9], pin_rw=14):
+    def __init__(self, busnum=0, pin_rs=15, pin_e=13, pins_db=[12, 11, 10, 9], pin_rw=14):
         self.pin_rs = pin_rs
         self.pin_e = pin_e
         self.pin_rw = pin_rw
@@ -87,7 +87,7 @@ class Adafruit_CharLCDPlate:
 
 	self.mcp = Adafruit_MCP230XX(busnum = busnum, address = 0x20, num_gpios = 16)
 
-	self.mcp.config(self.pin_e, self.OUTPUT)
+        self.mcp.config(self.pin_e, self.OUTPUT)
         self.mcp.config(self.pin_rs,  self.OUTPUT)
         self.mcp.config(self.pin_rw,  self.OUTPUT)
         self.mcp.output(self.pin_rw, 0)
@@ -98,9 +98,9 @@ class Adafruit_CharLCDPlate:
 
 	self.write4bits(0x33) # initialization
 	self.write4bits(0x32) # initialization
-	self.write4bits(0x28) # 2 line 5x8 matrix
+	self.write4bits(0x28) # 2 line 5x7 matrix
 	self.write4bits(0x0C) # turn cursor off 0x0E to enable cursor
-	self.write4bits(0x06) # set cursor incrementing and no shift of display
+	self.write4bits(0x06) # shift cursor right
 
 	self.displaycontrol = self.LCD_DISPLAYON | self.LCD_CURSOROFF | self.LCD_BLINKOFF
 
@@ -140,13 +140,12 @@ class Adafruit_CharLCDPlate:
 
     def home(self):
         self.write4bits(self.LCD_RETURNHOME) # set cursor position to zero
-        self.waitBFlow() #wait for Busy flag low
-
+        self.delayMicroseconds(2000) # this command takes a long time!
 
     def clear(self):
         self.write4bits(self.LCD_CLEARDISPLAY) # command to clear display
-        self.waitBFlow() #wait for Busy flag low
-		
+        self.delayMicroseconds(2000)	# 2000 microsecond sleep, clearing the display takes a long time
+
     def setCursor(self, col, row):
         self.row_offsets = [ 0x00, 0x40, 0x14, 0x54 ]
         if ( row > self.numlines ): 
@@ -164,38 +163,25 @@ class Adafruit_CharLCDPlate:
         self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
 
     def noCursor(self):
-        """ underline cursor off """
+        """ Turns the underline cursor on/off """
         self.displaycontrol &= ~self.LCD_CURSORON
         self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
 
 
     def cursor(self):
-        """ underline Cursor On """
+        """ Cursor On """
         self.displaycontrol |= self.LCD_CURSORON
         self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
 
-    def ToggleCursor(self):
-        """ Toggles the underline cursor On/Off bb"""
-        self.displaycontrol ^= self.LCD_CURSORON
-        self.delayMicroseconds(200000)
-        self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
-
     def noBlink(self):
-	""" Turn  off the blinking cursor """
+	""" Turn on and off the blinking cursor """
         self.displaycontrol &= ~self.LCD_BLINKON
         self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
 
-    def blink(self):
-        """ Turn on the blinking cursor"""
-        self.displaycontrol |= self.LCD_BLINKON
+    def noBlink(self):
+	""" Turn on and off the blinking cursor """
+        self.displaycontrol &= ~self.LCD_BLINKON
         self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
-
-    def ToggleBlink(self):
-        """ Toggles the blinking cursor"""
-        self.displaycontrol ^= self.LCD_BLINKON
-        self.delayMicroseconds(200000)
-        self.write4bits(self.LCD_DISPLAYCONTROL | self.displaycontrol)
-
 
     def DisplayLeft(self):
         """ These commands scroll the display without changing the RAM """
@@ -244,64 +230,6 @@ class Adafruit_CharLCDPlate:
             else:
                 self.mcp.output(self.pins_db[::-1][i-4], False)
         self.pulseEnable()
-        
- #See pg. 24 and 58 HD44780.pdf and http://www.avrbeginners.net/ Standard LCD bit mode
-    def read4bits(self, char_mode=False):
-        """ Get Data from LCD, when char_mode = 0 get Busy Flag and Address Counter, else get RAM data """
-#        print "First:", bin(self.mcp.direction)[2:].zfill(16)
-        self.mcp.output(self.pin_rs, char_mode) # when char_mode = 0 get Busy Flag and Address Counter, else get RAM data
-        self.mcp.output(self.pin_rw, 1) #set rw to 1
-#  Configure pins for input
-        makeinput=True
-        if makeinput:
-            for pin in self.pins_db:
-                self.mcp.config(pin,  self.INPUT)
-        self.mcp.output(self.pin_e, True)   # set Enable high and keep while read first nibble    
-        bits = range(8)
-		 # get the pins values
-        for i in range(4):
-            bt = self.mcp.input(self.pins_db[::-1][i], makeinput) # if makeinput is False, pin direction checking is supressed in input
-            bits[i]=bt
-            #print i,bt,bits[i]
-        self.mcp.output(self.pin_e, False)   # set Enable low to finish first nibble   
-        self.mcp.output(self.pin_e, True)   # set Enable high and keep while read 2nd nibble   
-		# get the pins values
-        for i in range(4,8):
-            bt = self.mcp.input(self.pins_db[::-1][i-4],makeinput)
-            bits[i]=bt
-            #print i,bt,bits[i]
-        self.mcp.output(self.pin_e, False)   # set Enable low to finish 2nd nibble   
-		# restore to pins to output and rw to 0
-        for pin in self.pins_db:
-            self.mcp.config(pin,  self.OUTPUT)
-        self.mcp.output(self.pin_rw, 0) # return rw to 0
-#		print "Last :", bin(self.mcp.direction)[2:].zfill(16)
-        return bits;
-
-    def readBF(self):
-        """ Get Data from LCD, when char_mode = 0 get Busy Flag and Address Counter, else get RAM data """
-#        print "First:", bin(self.mcp.direction)[2:].zfill(16)
-        self.mcp.output(self.pin_rs, 0) # when char_mode = 0 get Busy Flag and Address Counter, else get RAM data
-        self.mcp.output(self.pin_rw, 1) #set rw to 1
-#  Configure pins for input
-        makeinput=True
-        self.mcp.config(self.pins_db[::-1][1],  self.INPUT)
-        self.mcp.output(self.pin_e, True)   # set Enable high and keep while read first nibble    
-		# get the pins values
-        bt = self.mcp.input(self.pins_db[::-1][1], makeinput) # if makeinput is False, pin direction checking is supressed in input
-        self.mcp.output(self.pin_e, False)   # set Enable low to finish first nibble   
-        self.pulseEnable() # one more pulse to get (but ingore the 2nd nibble)
-		# restore to pins to output and rw to 0
-        self.mcp.config(self.pins_db[::-1][1],  self.OUTPUT)
-        self.mcp.output(self.pin_rw, 0) # return rw to 0
-        return bt==1
-
-    def waitBFlow(self):
-        for cnt in range(100000):
-            if not self.readBF():
-                #print cnt
-                return
-        print "timed out of waitBFlow"			
 
     def delayMicroseconds(self, microseconds):
         seconds = microseconds / 1000000	# divide microseconds by 1 million for seconds
@@ -317,7 +245,7 @@ class Adafruit_CharLCDPlate:
         """ Send string to LCD. Newline wraps to second line"""
         for char in text:
             if char == '\n':
-                self.write4bits(0xC0) # set DDRAM address 0x40 start of second line 
+                self.write4bits(0xC0) # next line
             else:
                 self.write4bits(ord(char),True)
 
@@ -335,55 +263,41 @@ class Adafruit_CharLCDPlate:
 
 if __name__ == '__main__':
 
-	lcd = Adafruit_CharLCDPlate(busnum = 1)
-	lcd.clear()
-	lcd.message("Adafruit RGB LCD\nPlate w/Keypad!")
-	sleep(1)
-
-	print " Cycle thru backlight colors 3 times "
-
-	for i in range(3):
-		print "red"
+    lcd = Adafruit_CharLCDPlate(busnum = 0)
+    lcd.clear()
+    lcd.message("Adafruit RGB LCD\nPlate w/Keypad!")
+    sleep(1)
+    while 1:
+	if (lcd.buttonPressed(lcd.LEFT)):
 		lcd.backlight(lcd.RED)
-		sleep(1)
-		print "yellow"
-		lcd.backlight(lcd.YELLOW)
-		sleep(1)
-		print "green"
-		lcd.backlight(lcd.GREEN)
-		sleep(1)
-		print "teal"
-		lcd.backlight(lcd.TEAL)
-		sleep(1)
-		print "blue"
+
+	if (lcd.buttonPressed(lcd.UP)):
 		lcd.backlight(lcd.BLUE)
-		sleep(1)
-		print "violet"
+
+	if (lcd.buttonPressed(lcd.DOWN)):
+		lcd.backlight(lcd.GREEN)
+
+	if (lcd.buttonPressed(lcd.RIGHT)):
 		lcd.backlight(lcd.VIOLET)
-		sleep(1)
-		print "off"
-		lcd.backlight(lcd.OFF)
-		sleep(1)
-		print "on"
+
+	if (lcd.buttonPressed(lcd.SELECT)):
 		lcd.backlight(lcd.ON)
-		sleep(1)
-
-	print " Try buttons on plate"
-	
-	while 1:
-		if (lcd.buttonPressed(lcd.LEFT)):
-			lcd.backlight(lcd.RED)
-
-		if (lcd.buttonPressed(lcd.UP)):
-			lcd.backlight(lcd.BLUE)
-
-		if (lcd.buttonPressed(lcd.DOWN)):
-			lcd.backlight(lcd.GREEN)
-
-		if (lcd.buttonPressed(lcd.RIGHT)):
-			lcd.backlight(lcd.VIOLET)
-
-		if (lcd.buttonPressed(lcd.SELECT)):
-			lcd.backlight(lcd.ON)
 
 
+    while 1:
+	lcd.backlight(lcd.RED)
+	sleep(1)
+	lcd.backlight(lcd.YELLOW)
+	sleep(1)
+	lcd.backlight(lcd.GREEN)
+	sleep(1)
+	lcd.backlight(lcd.TEAL)
+	sleep(1)
+	lcd.backlight(lcd.BLUE)
+	sleep(1)
+	lcd.backlight(lcd.VIOLET)
+	sleep(1)
+	lcd.backlight(lcd.ON)
+	sleep(1)
+	lcd.backlight(lcd.OFF)
+	sleep(1)
