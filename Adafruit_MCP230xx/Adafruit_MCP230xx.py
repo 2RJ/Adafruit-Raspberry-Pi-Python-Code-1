@@ -1,4 +1,4 @@
-﻿#!/usr/bin/python
+#!/usr/bin/python
 
 # Copyright 2012 Daniel Berlin (with some changes by Adafruit Industries/Limor Fried)
 #
@@ -93,7 +93,7 @@ class Adafruit_MCP230XX(object):
         if self.num_gpios <= 16:
             if (pin < 8):
                 # replace low bits
-                self.direction = (self.direction >> 8)<<8 |  self._readandchangepin(MCP23017_IODIRA, pin, mode)
+                self.direction = (self.direction & 0xff00) |  self._readandchangepin(MCP23017_IODIRA, pin, mode)
             else:
                 # replace hi bits
                 self.direction = (self.direction & 0xff) | self._readandchangepin(MCP23017_IODIRB, pin-8, mode) << 8
