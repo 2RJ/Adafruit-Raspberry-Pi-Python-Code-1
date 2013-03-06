@@ -4,7 +4,7 @@ from time import sleep
 import os
 from Adafruit_I2C import Adafruit_I2C
 from Adafruit_MCP230xx import Adafruit_MCP230XX
-from Adafruit_CharLCDPlate import Adafruit_CharLCDPlate;
+from Adafruit_CharLCDPlate import Adafruit_CharLCDPlate
 
 import smbus
 
@@ -36,6 +36,15 @@ class CPU(object):
 		self.prev_idle = idle
 		return usage
 
+		
+def memUsage():
+	free_fd = os.popen('free -b')
+	free_buf = free_fd.readlines()[1].split()
+	usage = (float(free_buf[2]) / (float(free_buf[1]))) * 100
+	usage = round(usage, 1)
+	return usage
+
+
 def status(lcd, updateWait = 3, color = 0x02): #0x02 = GREEN
 	# initialize the LCD plate
 	# use busnum = 0 for raspi version 1 (256MB) and busnum = 1 for version 2
@@ -51,7 +60,7 @@ def status(lcd, updateWait = 3, color = 0x02): #0x02 = GREEN
 	while 1:
 
 		lcd.clear()
-		lcd.message('CPU:'+ repr( cpu.usage() ) + '%')
+		lcd.message('CPU:'+ repr( cpu.usage() ) + '%\nMEM:' + repr(memUsage()) + '%')
 		for n in range(updateWait):
 			if( lcd.buttonPressed(lcd.SELECT)):
 				return 0
